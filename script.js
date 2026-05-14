@@ -5,37 +5,50 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const scoreEl = document.getElementById('scoreValue');
+const highScoreEl = document.getElementById('highScoreValue');
 const timeEl = document.getElementById('timeValue');
 const overlay = document.getElementById('overlay');
 const startScreen = document.getElementById('start-screen');
 const gameOverScreen = document.getElementById('game-over-screen');
 const finalScoreEl = document.getElementById('finalScore');
+const bestScoreEl = document.getElementById('bestScore');
 const finalTimeEl = document.getElementById('finalTime');
 const startBtn = document.getElementById('startBtn');
 const restartBtn = document.getElementById('restartBtn');
 
 // Game State
-let state = 'START'; // START, PLAYING, GAMEOVER
+let state = 'START';
 let score = 0;
+let highScore = localStorage.getItem('neonSphereHighScore') || 0;
 let startTime = 0;
 let currentTime = 0;
 let lastTime = 0;
 let enemies = [];
+let collectibles = [];
 let particles = [];
 let player = null;
 let spawnTimer = 0;
-const SPAWN_INTERVAL = 1000; // ms
+let collectibleTimer = 0;
+
+const SPAWN_INTERVAL = 1000;
+const COLLECTIBLE_INTERVAL = 3000;
 
 // Constants
 const PLAYER_RADIUS = 15;
 const ENEMY_RADIUS_MIN = 10;
 const ENEMY_RADIUS_MAX = 30;
+const COLLECTIBLE_RADIUS = 8;
 const INITIAL_ENEMY_COUNT = 3;
+
 const COLORS = {
     player: '#38bdf8',
     enemy: '#f43f5e',
-    particle: '#fbbf24'
+    collectible: '#fbbf24',
+    particle: '#ffffff'
 };
+
+// Update high score display immediately
+highScoreEl.innerText = highScore;
 
 /**
  * Entity Classes
@@ -54,14 +67,12 @@ class Ball {
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
         ctx.fillStyle = this.color;
         
-        // Neon Glow
         ctx.shadowBlur = 15;
         ctx.shadowColor = this.color;
         
         ctx.fill();
         ctx.restore();
 
-        // Inner highlight
         ctx.beginPath();
         ctx.arc(this.x - this.radius * 0.3, this.y - this.radius * 0.3, this.radius * 0.2, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
@@ -77,7 +88,6 @@ class Player extends Ball {
     }
 
     update() {
-        // Smooth interpolation to mouse
         this.x += (this.targetX - this.x) * 0.15;
         this.y += (this.targetY - this.y) * 0.15;
     }
@@ -94,7 +104,6 @@ class Enemy extends Ball {
         this.x += this.dx;
         this.y += this.dy;
 
-        // Bounce off walls
         if (this.x - this.radius < 0 || this.x + this.radius > canvas.width) {
             this.dx *= -1;
             this.x = this.x - this.radius < 0 ? this.radius : canvas.width - this.radius;
@@ -103,6 +112,27 @@ class Enemy extends Ball {
             this.dy *= -1;
             this.y = this.y - this.radius < 0 ? this.radius : canvas.height - this.radius;
         }
+    }
+}
+
+class Collectible extends Ball {
+    constructor(x, y) {
+        super(x, y, COLLECTIBLE_RADIUS, COLORS.collectible);
+        this.pulse = 0;
+    }
+
+    draw() {
+        this.pulse += 0.1;
+        const currentRadius = this.radius + Math.sin(this.pulse) * 2;
+        
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, currentRadius, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = this.color;
+        ctx.fill();
+        ctx.restore();
     }
 }
 
@@ -142,12 +172,16 @@ function init() {
     resize();
     player = new Player();
     enemies = [];
+    collectibles = [];
     particles = [];
     score = 0;
     currentTime = 0;
     spawnTimer = 0;
+    collectibleTimer = 0;
     
-    // Initial enemies
+    scoreEl.innerText = score;
+    highScoreEl.innerText = highScore;
+
     for (let i = 0; i < INITIAL_ENEMY_COUNT; i++) {
         spawnEnemy();
     }
@@ -157,13 +191,12 @@ function spawnEnemy() {
     const radius = Math.random() * (ENEMY_RADIUS_MAX - ENEMY_RADIUS_MIN) + ENEMY_RADIUS_MIN;
     let x, y;
     
-    // Ensure enemy doesn't spawn on player
     do {
         x = Math.random() * (canvas.width - radius * 2) + radius;
         y = Math.random() * (canvas.height - radius * 2) + radius;
-    } while (Math.hypot(x - player.x, y - player.y) < radius + player.radius + 100);
+    } while (Math.hypot(x - player.x, y - player.y) < radius + player.radius + 150);
 
-    const speed = 2 + (currentTime / 10000); // Speed increases with time
+    const speed = 2 + (currentTime / 10000);
     const angle = Math.random() * Math.PI * 2;
     const dx = Math.cos(angle) * speed;
     const dy = Math.sin(angle) * speed;
@@ -171,8 +204,20 @@ function spawnEnemy() {
     enemies.push(new Enemy(x, y, radius, dx, dy));
 }
 
-function createExplosion(x, y, color) {
-    for (let i = 0; i < 20; i++) {
+function spawnCollectible() {
+    let x, y;
+    const radius = COLLECTIBLE_RADIUS;
+    
+    do {
+        x = Math.random() * (canvas.width - radius * 2) + radius;
+        y = Math.random() * (canvas.height - radius * 2) + radius;
+    } while (Math.hypot(x - player.x, y - player.y) < 100);
+
+    collectibles.push(new Collectible(x, y));
+}
+
+function createExplosion(x, y, color, count = 20) {
+    for (let i = 0; i < count; i++) {
         particles.push(new Particle(x, y, color));
     }
 }
@@ -195,23 +240,42 @@ function animate(timestamp) {
     if (state === 'PLAYING') {
         currentTime += deltaTime;
         spawnTimer += deltaTime;
+        collectibleTimer += deltaTime;
 
         if (spawnTimer > SPAWN_INTERVAL) {
             spawnEnemy();
             spawnTimer = 0;
-            score += 10;
+            score += 5; // Passive score gain
+            updateScore();
+        }
+
+        if (collectibleTimer > COLLECTIBLE_INTERVAL) {
+            spawnCollectible();
+            collectibleTimer = 0;
         }
 
         // Update & Draw Player
         player.update();
         player.draw();
 
+        // Update & Draw Collectibles
+        collectibles = collectibles.filter(c => {
+            c.draw();
+            const dist = Math.hypot(player.x - c.x, player.y - c.y);
+            if (dist < player.radius + c.radius) {
+                score += 50;
+                updateScore();
+                createExplosion(c.x, c.y, COLORS.collectible, 10);
+                return false;
+            }
+            return true;
+        });
+
         // Update & Draw Enemies
-        enemies.forEach((enemy, index) => {
+        enemies.forEach((enemy) => {
             enemy.update();
             enemy.draw();
 
-            // Collision Check
             const dist = Math.hypot(player.x - enemy.x, player.y - enemy.y);
             if (dist < player.radius + enemy.radius) {
                 gameOver();
@@ -219,11 +283,9 @@ function animate(timestamp) {
         });
 
         // Update HUD
-        scoreEl.innerText = score;
         timeEl.innerText = (currentTime / 1000).toFixed(1) + 's';
     }
 
-    // Always update & draw particles
     particles = particles.filter(p => p.alpha > 0);
     particles.forEach(p => {
         p.update();
@@ -231,6 +293,15 @@ function animate(timestamp) {
     });
 
     requestAnimationFrame(animate);
+}
+
+function updateScore() {
+    scoreEl.innerText = score;
+    if (score > highScore) {
+        highScore = score;
+        highScoreEl.innerText = highScore;
+        localStorage.setItem('neonSphereHighScore', highScore);
+    }
 }
 
 function startGame() {
@@ -245,12 +316,13 @@ function startGame() {
 
 function gameOver() {
     state = 'GAMEOVER';
-    createExplosion(player.x, player.y, COLORS.player);
-    createExplosion(player.x, player.y, COLORS.enemy);
+    createExplosion(player.x, player.y, COLORS.player, 30);
+    createExplosion(player.x, player.y, COLORS.enemy, 20);
     
     overlay.classList.add('active');
     gameOverScreen.classList.remove('hidden');
     finalScoreEl.innerText = score;
+    bestScoreEl.innerText = highScore;
     finalTimeEl.innerText = (currentTime / 1000).toFixed(1) + 's';
 }
 
