@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Sphere Survival | Interactive Canvas Game</title>
+    <meta name="description" content="A fast-paced neon-themed survival game built with HTML5 Canvas. Dodge the red spheres and survive as long as possible!">
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="hud">
+            <div class="stat">
+                <span class="label">SCORE</span>
+                <span id="scoreValue">0</span>
+            </div>
+            <div class="stat">
+                <span class="label">SURVIVED</span>
+                <span id="timeValue">0.0s</span>
+            </div>
+        </div>
+
+        <div id="overlay" class="overlay active">
+            <div class="glass-card" id="start-screen">
+                <h1>NEON<br><span class="highlight">SPHERE</span></h1>
+                <p>Dodge the red spheres. Survive the neon void.</p>
+                <button id="startBtn" class="btn-primary">START VOYAGE</button>
+                <div class="controls-hint">
+                    <span>Move cursor/finger to control</span>
+                </div>
+            </div>
+
+            <div class="glass-card hidden" id="game-over-screen">
+                <h2 class="danger">SYSTEM CRITICAL</h2>
+                <p>Your sphere was de-materialized.</p>
+                <div class="final-stats">
+                    <div class="final-stat">
+                        <span class="label">FINAL SCORE</span>
+                        <span id="finalScore">0</span>
+                    </div>
+                    <div class="final-stat">
+                        <span class="label">TIME</span>
+                        <span id="finalTime">0.0s</span>
+                    </div>
+                </div>
+                <button id="restartBtn" class="btn-primary">RE-MATERIALIZE</button>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
